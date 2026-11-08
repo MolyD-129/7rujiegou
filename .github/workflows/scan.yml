@@ -4,7 +4,7 @@ on:
   schedule:
     # GitHub cron 用 UTC，北京时间 = UTC+8
     - cron: '0 9 * * 1-5'     # 17:00 北京
-    - cron: '0 11' * * 1-5'   # 19:00 北京
+    - cron: '0 11 * * 1-5'   # 19:00 北京
   workflow_dispatch:
 
 permissions:
