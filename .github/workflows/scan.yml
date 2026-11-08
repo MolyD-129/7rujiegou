@@ -1,0 +1,56 @@
+name: 7入结构股票扫描
+
+on:
+  schedule:
+    # GitHub cron 用 UTC，北京时间 = UTC+8
+    - cron: '0 9 * * 1-5'     # 17:00 北京
+    - cron: '0 11' * * 1-5'   # 19:00 北京
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 执行扫描并推送钉钉
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python run_scan.py --force
+          else
+            python run_scan.py
+          fi
+
+      - name: 提交数据（保持 schedule 活跃 + 更新网页）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/data.json pool.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "无数据变化，跳过提交"
+          else
+            git commit -m "chore: 扫描数据更新 $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
