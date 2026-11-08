@@ -1,9 +1,9 @@
 {
  "trade_date": "20261106",
- "updated_at": "2026-11-08 11:22:48",
- "total_scanned": 84,
+ "updated_at": "2026-11-08 13:33:27",
+ "total_scanned": 89,
  "failed": 0,
- "elapsed": 13.1,
+ "elapsed": 12.2,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -11,12 +11,48 @@
   "t_max": 20
  },
  "filters": {
-  "min_amount_yi": 1.0,
-  "min_mktcap_yi": 30.0,
-  "min_price": 2.0,
+  "min_amount_yi": 0.5,
+  "min_mktcap_yi": 20.0,
+  "min_price": 1.0,
   "exclude_st": true
  },
  "signals": [
+  {
+   "code": "002086",
+   "name": "东方海洋",
+   "price": 3.97,
+   "mktcap": 77.8,
+   "amount_yi": 25.76,
+   "t0_date": "2026-11-03",
+   "P": 3.42,
+   "break_date": "2026-11-04",
+   "break_low": 3.08,
+   "days_after_break": 2,
+   "vol_ratio_ma5": 1.24,
+   "vol_ratio_ma10": 1.49,
+   "vol_vs_t0": 2.92,
+   "t0_pct": 9.97,
+   "close": 3.97,
+   "pct_today": 9.97
+  },
+  {
+   "code": "600261",
+   "name": "阳光照明",
+   "price": 5.4,
+   "mktcap": 72.1,
+   "amount_yi": 12.75,
+   "t0_date": "2026-11-03",
+   "P": 4.95,
+   "break_date": "2026-11-04",
+   "break_low": 4.02,
+   "days_after_break": 2,
+   "vol_ratio_ma5": 1.11,
+   "vol_ratio_ma10": 1.71,
+   "vol_vs_t0": 0.71,
+   "t0_pct": 10.0,
+   "close": 5.4,
+   "pct_today": 9.98
+  },
   {
    "code": "002943",
    "name": "宇晶股份",
@@ -34,6 +70,24 @@
    "t0_pct": 10.0,
    "close": 30.89,
    "pct_today": 5.14
+  },
+  {
+   "code": "000525",
+   "name": "红太阳",
+   "price": 5.02,
+   "mktcap": 65.4,
+   "amount_yi": 5.94,
+   "t0_date": "2026-11-02",
+   "P": 4.94,
+   "break_date": "2026-11-04",
+   "break_low": 4.29,
+   "days_after_break": 2,
+   "vol_ratio_ma5": 1.15,
+   "vol_ratio_ma10": 1.76,
+   "vol_vs_t0": 8.22,
+   "t0_pct": 10.02,
+   "close": 5.02,
+   "pct_today": 10.09
   },
   {
    "code": "002889",
