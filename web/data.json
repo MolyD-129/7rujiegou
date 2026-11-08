@@ -1,1 +1,11 @@
-
+{
+ "trade_date": "",
+ "updated_at": "",
+ "total_scanned": 0,
+ "failed": 0,
+ "elapsed": 0,
+ "params": {},
+ "filters": {},
+ "signals": [],
+ "pushed": false
+}
