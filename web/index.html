@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>7入结构 · 股票扫描</title>
+<style>
+  :root{color-scheme:light dark}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
+       "PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:24px;
+       background:#0f172a;color:#e2e8f0}
+  h1{font-size:22px;margin:0 0 6px}
+  .meta{font-size:13px;color:#94a3b8;margin-bottom:20px}
+  .empty{padding:40px;text-align:center;color:#64748b;border:1px dashed #334155;border-radius:12px}
+  table{width:100%;border-collapse:collapse;background:#1e293b;border-radius:12px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;font-size:14px;border-bottom:1px solid #334155}
+  th{background:#111827;color:#cbd5e1;font-weight:600;font-size:13px}
+  tr:last-child td{border-bottom:none}
+  .up{color:#f87171}
+  .down{color:#34d399}
+  .code{color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .refresh{display:inline-block;margin-left:12px;font-size:12px;color:#38bdf8;
+           cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<h1>7入结构 · 股票信号</h1>
+<div class="meta" id="meta">加载中…<span class="refresh" onclick="load()">刷新</span></div>
+<div id="main"></div>
+
+<script>
+async function load(){
+  const meta = document.getElementById('meta');
+  const main = document.getElementById('main');
+  try{
+    const r = await fetch('./data.json?t=' + Date.now(), {cache:'no-store'});
+    const d = await r.json();
+    meta.innerHTML = `交易日 <b>${d.trade_date||'-'}</b> · 更新 ${d.updated_at||'-'} ·
+      扫描 ${d.total_scanned||0} 只 · 命中 <b>${(d.signals||[]).length}</b> 只
+      <span class="refresh" onclick="load()">刷新</span>`;
+    const sig = d.signals || [];
+    if(!sig.length){ main.innerHTML = '<div class="empty">今日无符合条件的股票，空仓也是一种结果。</div>'; return; }
+    let html = `<table><thead><tr>
+      <th>#</th><th>名称(代码)</th><th>现价</th><th>今日涨幅</th>
+      <th>启动线P</th><th>破位日</th><th>站回第N天</th>
+      <th>量/5日均</th><th>成交额(亿)</th></tr></thead><tbody>`;
+    sig.forEach((s,i)=>{
+      const cls = s.pct_today >= 0 ? 'up' : 'down';
+      html += `<tr>
+        <td>${i+1}</td>
+        <td><b>${s.name}</b> <span class="code">${s.code}</span></td>
+        <td>${s.price}</td>
+        <td class="${cls}">${(s.pct_today>=0?'+':'')+s.pct_today}%</td>
+        <td>${s.P}</td>
+        <td>${s.break_date}</td>
+        <td>${s.days_after_break}</td>
+        <td>${s.vol_ratio_ma5}</td>
+        <td>${s.amount_yi}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    main.innerHTML = html;
+  }catch(e){
+    meta.innerHTML = '数据加载失败：' + e + ' <span class="refresh" onclick="load()">重试</span>';
+  }
+}
+load();
+</script>
+</body>
+</html>
