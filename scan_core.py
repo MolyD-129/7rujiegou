@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""7入结构 扫描核心（全市场股票池自动拉取，不含北交所）"""
+"""7入结构 扫描核心（修复连板判定、空数据报错、日期错位）"""
 import json
 import os
 import time
@@ -16,7 +16,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POOL_FILE = os.path.join(BASE_DIR, "pool.json")
 
 CFG = dict(n_break=3, m_enter=7, break_max_pct=0.15, t_max=20)
-FILTER = dict(min_amount_yi=1.0, min_mktcap_yi=30.0, min_price=2.0, exclude_st=True)
+FILTER = dict(min_amount_yi=0.5, min_mktcap_yi=20.0, min_price=1.0, exclude_st=True)
 
 
 def qq(code):
@@ -28,22 +28,14 @@ def qq(code):
 
 
 def limit_thr(code):
+    # 阈值稍微放宽，防止浮点误差漏掉连板
     if code.startswith(("30", "68")):
-        return 0.195
-    return 0.095
+        return 0.19
+    return 0.09
 
 
-# ---------------- 股票池（不含北交所） ----------------
+# ---------------- 股票池 ----------------
 def _fetch_all_a_from_eastmoney():
-    """
-    只拉：沪主板 + 科创板 + 深主板 + 创业板
-    fs 参数说明：
-      m:0+t:6   -> 深主板 A
-      m:0+t:80  -> 创业板
-      m:1+t:2   -> 沪主板 A
-      m:1+t:23  -> 科创板
-    北交所 (m:0+t:81+s:2048) 已去掉
-    """
     url = "https://push2.eastmoney.com/api/qt/clist/get"
     params = {
         "pn": 1, "pz": 8000, "po": 1, "np": 1, "fltt": 2, "invt": 2,
@@ -111,20 +103,27 @@ def fetch_snapshot(batch=60):
             try:
                 body = line.split('="', 1)[1].rstrip('"')
                 f = body.split("~")
-                if len(f) < 50:
+                if len(f) < 46:
                     continue
                 code = f[2]
                 price = float(f[3])
                 if price <= 0:
                     continue
+                
+                amount_str = f[37].strip() if len(f) > 37 else "0"
+                mktcap_str = f[45].strip() if len(f) > 45 else "0"
+                amount = float(amount_str) * 1e4 if amount_str else 0.0
+                mktcap = float(mktcap_str) if mktcap_str else 0.0
+                
+                date_str = f[30][:8] if len(f) > 30 and len(f[30]) >= 8 else time.strftime("%Y%m%d")
+
                 snap[code] = {
                     "name": f[1], "price": price, "prev_close": float(f[4]),
                     "open": float(f[5]), "volume": float(f[6]) * 100,
                     "high": float(f[33]), "low": float(f[34]),
-                    "amount": float(f[37]) * 1e4, "mktcap": float(f[45]),
-                    "date": f[30][:8],
+                    "amount": amount, "mktcap": mktcap, "date": date_str,
                 }
-            except Exception:
+            except Exception as e:
                 continue
         time.sleep(0.04)
     return snap
@@ -156,18 +155,22 @@ def fetch_kline(code, days=45):
     return None
 
 
-# ---------------- 信号判定 ----------------
+# ---------------- 信号判定 (纯靠涨幅判定涨停) ----------------
 def eval_signal(code, df, snap_row=None):
     d = df.copy()
     d["pct"] = d["close"].pct_change()
     thr = limit_thr(code)
-    d["is_up"] = (d["pct"] >= thr) & (d["close"] > d["open"] * 1.001)
+    
+    # 不再判断 close 和 open 的关系，只要涨幅达标就认作涨停
+    d["is_up"] = (d["pct"] >= thr) & (d["close"] > 0)
+    
     d["fb"] = d["is_up"] & (~d["is_up"].shift(1).fillna(False))
     d["ma5v"] = d["volume"].rolling(5).mean()
     d["ma10v"] = d["volume"].rolling(10).mean()
     n = len(d)
     if n < 20:
         return None
+    
     for t0 in range(n - 1, max(n - 13, 10), -1):
         if not d.at[t0, "fb"]:
             continue
