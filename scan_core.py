@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""7入结构 核心扫描器（东财+baostock 双源股票池终极版）"""
+"""7入结构 核心扫描器（极速网络优化版）"""
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
@@ -18,6 +18,10 @@ POOL_FILE = os.path.join(BASE_DIR, "pool.json")
 
 CFG = dict(n_break=3, m_enter=7, break_max_pct=0.15, t_max=20)
 FILTER = dict(min_amount_yi=0.5, exclude_st=True)
+
+# 获取北京时间的辅助函数
+def get_bj_time():
+    return datetime.now(timezone(timedelta(hours=8)))
 
 
 def qq(code):
@@ -59,7 +63,6 @@ def _fetch_all_a_from_baostock():
         row = rs.get_row_data()
         code_str = row[0].split(".")[-1]
         name = row[1]
-        # 只要沪深A股（排除北交所，排除退市）
         if len(code_str) == 6 and code_str.startswith(("60", "68", "00", "30")):
             out.append({"code": code_str, "name": name})
     bs.logout()
@@ -67,7 +70,6 @@ def _fetch_all_a_from_baostock():
 
 
 def ensure_pool(force=False, max_age_hours=24):
-    # 1. 如果本地已经有 pool.json，且数量超过 3000 只，直接使用！
     if os.path.exists(POOL_FILE) and not force:
         try:
             with open(POOL_FILE, encoding="utf-8") as f:
@@ -78,7 +80,6 @@ def ensure_pool(force=False, max_age_hours=24):
         except Exception:
             pass
 
-    # 2. 本地没有或数量太少，先试东财
     print("→ 尝试从东方财富拉取全市场股票池...")
     try:
         arr = _fetch_all_a_from_eastmoney()
@@ -87,12 +88,9 @@ def ensure_pool(force=False, max_age_hours=24):
                 json.dump(arr, f, ensure_ascii=False, indent=1)
             print(f"→ 东财股票池更新成功：{len(arr)} 只")
             return
-        else:
-            print(f"⚠️ 东财返回数据过小({len(arr)}只)，准备切换 baostock...")
     except Exception as e:
         print(f"❌ 东财拉取失败: {e}")
 
-    # 3. 东财失败，用 baostock 兜底
     print("→ 使用 Baostock 拉取全市场股票池...")
     try:
         arr = _fetch_all_a_from_baostock()
@@ -110,7 +108,6 @@ def ensure_pool(force=False, max_age_hours=24):
 def _load_pool():
     with open(POOL_FILE, encoding="utf-8") as f:
         data = json.load(f)
-        # 兼容两种情况：东财的 f12/f14 结构，或代码保存的 code/name 结构
         if isinstance(data, dict) and "data" in data and "diff" in data["data"]:
             arr = data["data"]["diff"]
         else:
@@ -125,46 +122,44 @@ def _load_pool():
     return out
 
 
-# ---------------- 2. 获取K线（不复权） ----------------
+# ---------------- 2. 获取K线（极速网络优化） ----------------
 def fetch_kline_tencent(code, days=45):
     sym = qq(code)
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={sym},day,,,{days},"
-    for a in range(3):
-        try:
-            r = requests.get(url, headers=HDR, timeout=10)
-            js = r.json()
-            if js.get("code") != 0:
-                return None
-            data_key = "day" if "day" in js["data"][sym] else "qfqday"
-            raw = js["data"][sym][data_key]
-            if not raw or len(raw) < 20:
-                return None
-            recs = []
-            for x in raw:
-                recs.append({
-                    "date": x[0], 
-                    "open": float(x[1]), 
-                    "close": float(x[2]),
-                    "high": float(x[3]), 
-                    "low": float(x[4]), 
-                    "volume": float(x[5]) * 100
-                })
-            return pd.DataFrame(recs)
-        except Exception:
-            time.sleep(0.5)
-    return None
+    
+    # 只尝试 1 次，timeout 缩短为 4 秒，海外网络慢就直接放弃，避免阻塞全盘
+    try:
+        r = requests.get(url, headers=HDR, timeout=4)
+        js = r.json()
+        if js.get("code") != 0:
+            return None
+        data_key = "day" if "day" in js["data"][sym] else "qfqday"
+        raw = js["data"][sym][data_key]
+        if not raw or len(raw) < 20:
+            return None
+        recs = []
+        for x in raw:
+            recs.append({
+                "date": x[0], 
+                "open": float(x[1]), 
+                "close": float(x[2]),
+                "high": float(x[3]), 
+                "low": float(x[4]), 
+                "volume": float(x[5]) * 100
+            })
+        return pd.DataFrame(recs)
+    except Exception:
+        return None
 
 
-# ---------------- 3. 信号判定（真实涨停价 + 洗盘废弃老信号） ----------------
+# ---------------- 3. 信号判定 ----------------
 def eval_signal(code, df):
     d = df.copy()
     
-    # 算真实涨停价（昨收 * 1.1或1.2，保留两位）
     limit_pct = 1.20 if code.startswith(("30", "68")) else 1.10
     d["prev_close"] = d["close"].shift(1)
     d["limit_price"] = (d["prev_close"] * limit_pct).round(2)
     
-    # 兼容T字、一字、烂板
     d["is_up"] = (d["close"] >= d["limit_price"] - 0.01) & (d["close"] > 0)
     d["fb"] = d["is_up"] & (~d["is_up"].shift(1).fillna(False))
     
@@ -177,7 +172,6 @@ def eval_signal(code, df):
             continue
             
         P = d.at[t0, "open"]
-        # 如果开盘价 == 收盘价 == 最高价，判定为一字板/T字板
         is_yizi = bool(d.at[t0, "open"] == d.at[t0, "close"] == d.at[t0, "high"])
         
         brk = None
@@ -198,7 +192,6 @@ def eval_signal(code, df):
                 d.at[last, "volume"] > d.at[last, "ma10v"]):
             continue
             
-        # 边界处理：破位到站回期间，如果出现新首板，老信号作废
         if d.loc[t0+1:last, "fb"].any():
             continue
             
@@ -234,14 +227,18 @@ def scan_all(progress=None):
     skipped_liq = 0
 
     def work(code):
+        # 获取 K 线
         df = fetch_kline_tencent(code, 45)
         if df is None:
             return code, None, "stale"
             
+        # 僵尸股判定：最后一天距今超过 10 天
         last_date = datetime.strptime(df.iloc[-1]["date"], "%Y-%m-%d")
-        if (datetime.now() - last_date).days > 10:
+        # 用北京时间对比
+        if (get_bj_time().replace(tzinfo=None) - last_date).days > 10:
             return code, None, "stale"
             
+        # 流动性过滤
         last_row = df.iloc[-1]
         amount = float(last_row['close']) * float(last_row['volume'])
         if amount < FILTER["min_amount_yi"] * 1e8:
@@ -256,7 +253,8 @@ def scan_all(progress=None):
             return code, sig, None
         return code, None, None
 
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    # 线程数降为 8，避免 GitHub 海外 IP 被腾讯屏蔽
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futs = {ex.submit(work, c): c for c in codes}
         for i, fu in enumerate(as_completed(futs)):
             try:
@@ -279,10 +277,10 @@ def scan_all(progress=None):
     results.sort(key=lambda x: x["amount_yi"], reverse=True)
     
     return {
-        "trade_date": time.strftime("%Y-%m-%d"),
-        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "trade_date": get_bj_time().strftime("%Y-%m-%d"), # 强制北京时间
+        "updated_at": get_bj_time().strftime("%Y-%m-%d %H:%M:%S"),
         "total_scanned": scanned,
-        "skipped": f"僵尸股 {skipped_stale} 只, 流动性差 {skipped_liq} 只",
+        "skipped": f"僵尸/超时 {skipped_stale} 只, 流动性差 {skipped_liq} 只",
         "elapsed": round(time.time() - t_start, 1),
         "params": CFG,
         "filters": FILTER,
