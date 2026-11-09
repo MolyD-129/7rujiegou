@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-入口：
-  - 今天已推送    -> 跳过
-  - 今天已扫描未推送 -> 只重推（不重扫）
-  - 其他          -> 扫描 + 写 data.json + 推送 + 标记 pushed=true
+入口：幂等判断 → 扫描 → 写 web/data.json → 推钉钉
 """
 import json
 import os
