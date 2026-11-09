@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""7入结构 核心扫描器（Baostock 纯血极速稳定版）"""
+"""7入结构 核心扫描器（腾讯 HTTP 多线程高容错版）"""
 import json
 import os
 import time
@@ -8,6 +8,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
+
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+HDR = {"User-Agent": UA, "Referer": "https://gu.qq.com/"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POOL_FILE = os.path.join(BASE_DIR, "pool.json")
@@ -18,16 +22,16 @@ FILTER = dict(min_amount_yi=0.5, exclude_st=True)
 def get_bj_time():
     return datetime.now(timezone(timedelta(hours=8)))
 
-def bs_code(code):
-    """转为 baostock 格式：sh.600000 或 sz.000001"""
+
+def qq(code):
     if code.startswith(("60", "68", "90", "11")):
-        return f"sh.{code}"
+        return "sh" + code
     if code.startswith(("00", "30", "20", "12", "15")):
-        return f"sz.{code}"
-    return f"sz.{code}"
+        return "sz" + code
+    return "sz" + code
 
 
-# ---------------- 1. 股票池拉取（直接用 Baostock） ----------------
+# ---------------- 1. 股票池拉取（直接用 Baostock，拉一次存本地就不会再断了） ----------------
 def _fetch_all_a_from_baostock():
     import baostock as bs
     bs.login()
@@ -37,14 +41,13 @@ def _fetch_all_a_from_baostock():
         row = rs.get_row_data()
         code_str = row[0].split(".")[-1]
         name = row[1]
-        # 只要沪深A股（排除北交所，排除退市）
         if len(code_str) == 6 and code_str.startswith(("60", "68", "00", "30")):
             out.append({"code": code_str, "name": name})
     bs.logout()
     return out
 
 
-def ensure_pool(force=False, max_age_hours=24):
+def ensure_pool(force=False):
     if os.path.exists(POOL_FILE) and not force:
         try:
             with open(POOL_FILE, encoding="utf-8") as f:
@@ -55,54 +58,66 @@ def ensure_pool(force=False, max_age_hours=24):
         except Exception:
             pass
 
-    print("→ 使用 Baostock 拉取全市场股票池...")
+    print("→ 首次运行，拉取全市场股票池...")
     arr = _fetch_all_a_from_baostock()
     if len(arr) > 3000:
         with open(POOL_FILE, "w", encoding="utf-8") as f:
             json.dump(arr, f, ensure_ascii=False, indent=1)
         print(f"→ 股票池更新成功：{len(arr)} 只")
     else:
-        raise RuntimeError("Baostock 拉取股票池失败！")
+        raise RuntimeError("拉取股票池失败！")
 
 
 def _load_pool():
     with open(POOL_FILE, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+        # 兼容东财或baostock的结构
+        if isinstance(data, dict) and "data" in data and "diff" in data["data"]:
+            arr = data["data"]["diff"]
+        else:
+            arr = data
+            
+    out = []
+    for x in arr:
+        code = str(x.get("f12", x.get("code", ""))).strip()
+        name = str(x.get("f14", x.get("name", ""))).strip()
+        if len(code) == 6:
+            out.append({"code": code, "name": name})
+    return out
 
 
-# ---------------- 2. 获取K线（Baostock 极其稳定） ----------------
-def fetch_kline_baostock(code, days=45):
-    import baostock as bs
-    end_date = get_bj_time().strftime("%Y-%m-%d")
-    start_date = (get_bj_time() - timedelta(days=90)).strftime("%Y-%m-%d")
+# ---------------- 2. 获取K线（腾讯 HTTP 高容错） ----------------
+def fetch_kline_tencent(code, days=45):
+    sym = qq(code)
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={sym},day,,,{days},"
     
-    sym = bs_code(code)
-    # adjustflag="3" 代表不复权，这对于精确判断涨停价至关重要
-    rs = bs.query_history_k_data_plus(
-        sym, "date,open,high,low,close,volume", 
-        start_date=start_date, end_date=end_date, 
-        frequency="d", adjustflag="3"
-    )
-    
-    if rs.error_code != '0':
-        return None
-        
-    data = []
-    while rs.next():
-        data.append(rs.get_row_data())
-        
-    if len(data) < 20:
-        return None
-        
-    df = pd.DataFrame(data, columns=["date", "open", "high", "low", "close", "volume"])
-    df["open"] = df["open"].astype(float)
-    df["close"] = df["close"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["volume"] = df["volume"].astype(float) # 单位：股
-    
-    # 截取最近 45 天
-    return df.tail(days).reset_index(drop=True)
+    # 重试 3 次，每次超时 12 秒，给海外网络留足时间
+    for a in range(3):
+        try:
+            r = requests.get(url, headers=HDR, timeout=12)
+            js = r.json()
+            if js.get("code") != 0:
+                return None
+            data_key = "day" if "day" in js["data"][sym] else "qfqday"
+            raw = js["data"][sym][data_key]
+            if not raw or len(raw) < 20:
+                return None
+            
+            recs = []
+            for x in raw:
+                recs.append({
+                    "date": x[0], 
+                    "open": float(x[1]), 
+                    "close": float(x[2]),
+                    "high": float(x[3]), 
+                    "low": float(x[4]), 
+                    "volume": float(x[5]) * 100
+                })
+            return pd.DataFrame(recs)
+        except Exception:
+            time.sleep(1) # 失败等 1 秒再重试
+            
+    return None
 
 
 # ---------------- 3. 信号判定 ----------------
@@ -168,13 +183,8 @@ def eval_signal(code, df):
 
 # ---------------- 4. 主扫描 ----------------
 def scan_all(progress=None):
-    import baostock as bs
     t_start = time.time()
     ensure_pool()
-    
-    # 登录 Baostock
-    bs.login()
-    
     pool = _load_pool()
     pool_dict = {x["code"]: x["name"] for x in pool}
     codes = list(pool_dict.keys())
@@ -185,8 +195,8 @@ def scan_all(progress=None):
     skipped_liq = 0
 
     def work(code):
-        df = fetch_kline_baostock(code, 45)
-        if df is None or df.empty:
+        df = fetch_kline_tencent(code, 45)
+        if df is None:
             return code, None, "stale"
             
         last_date = datetime.strptime(df.iloc[-1]["date"], "%Y-%m-%d")
@@ -194,7 +204,6 @@ def scan_all(progress=None):
             return code, None, "stale"
             
         last_row = df.iloc[-1]
-        # 成交额估算：收盘价 * 成交量（股）
         amount = float(last_row['close']) * float(last_row['volume'])
         if amount < FILTER["min_amount_yi"] * 1e8:
             return code, None, "liq"
@@ -208,8 +217,8 @@ def scan_all(progress=None):
             return code, sig, None
         return code, None, None
 
-    # Baostock 接口很稳，但并发别太高，8 线程完美
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    # 线程数设为 6，防止被封，但依然能较快跑完
+    with ThreadPoolExecutor(max_workers=6) as ex:
         futs = {ex.submit(work, c): c for c in codes}
         for i, fu in enumerate(as_completed(futs)):
             try:
@@ -229,8 +238,6 @@ def scan_all(progress=None):
             if progress and (i + 1) % 200 == 0:
                 progress(i + 1, len(codes), len(results))
 
-    bs.logout()
-    
     results.sort(key=lambda x: x["amount_yi"], reverse=True)
     
     return {
