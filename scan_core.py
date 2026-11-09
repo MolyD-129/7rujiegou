@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""7入结构 核心扫描器（极速网络优化版）"""
+"""7入结构 核心扫描器（Baostock 纯血极速稳定版）"""
 import json
 import os
 import time
@@ -9,60 +9,35 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import requests
 
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-HDR = {"User-Agent": UA, "Referer": "https://gu.qq.com/"}
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POOL_FILE = os.path.join(BASE_DIR, "pool.json")
 
 CFG = dict(n_break=3, m_enter=7, break_max_pct=0.15, t_max=20)
 FILTER = dict(min_amount_yi=0.5, exclude_st=True)
 
-# 获取北京时间的辅助函数
 def get_bj_time():
     return datetime.now(timezone(timedelta(hours=8)))
 
-
-def qq(code):
+def bs_code(code):
+    """转为 baostock 格式：sh.600000 或 sz.000001"""
     if code.startswith(("60", "68", "90", "11")):
-        return "sh" + code
+        return f"sh.{code}"
     if code.startswith(("00", "30", "20", "12", "15")):
-        return "sz" + code
-    return "sz" + code
+        return f"sz.{code}"
+    return f"sz.{code}"
 
 
-# ---------------- 1. 股票池拉取（东财 + Baostock 兜底） ----------------
-def _fetch_all_a_from_eastmoney():
-    url = "https://push2.eastmoney.com/api/qt/clist/get"
-    params = {
-        "pn": "1", "pz": "6000", "po": "1", "np": "1",
-        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
-        "fltt": "2", "invt": "2", "fid": "f3",
-        "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-        "fields": "f12,f14",
-    }
-    r = requests.get(url, params=params, headers=HDR, timeout=10)
-    js = r.json()
-    diff = js["data"]["diff"]
-    out = []
-    for it in diff:
-        code = str(it.get("f12", "")).strip()
-        name = str(it.get("f14", "")).strip()
-        if len(code) == 6:
-            out.append({"code": code, "name": name})
-    return out
-
-
+# ---------------- 1. 股票池拉取（直接用 Baostock） ----------------
 def _fetch_all_a_from_baostock():
     import baostock as bs
-    lg = bs.login()
+    bs.login()
     rs = bs.query_stock_basic()
     out = []
     while (rs.error_code == '0') & rs.next():
         row = rs.get_row_data()
         code_str = row[0].split(".")[-1]
         name = row[1]
+        # 只要沪深A股（排除北交所，排除退市）
         if len(code_str) == 6 and code_str.startswith(("60", "68", "00", "30")):
             out.append({"code": code_str, "name": name})
     bs.logout()
@@ -80,76 +55,54 @@ def ensure_pool(force=False, max_age_hours=24):
         except Exception:
             pass
 
-    print("→ 尝试从东方财富拉取全市场股票池...")
-    try:
-        arr = _fetch_all_a_from_eastmoney()
-        if len(arr) > 3000:
-            with open(POOL_FILE, "w", encoding="utf-8") as f:
-                json.dump(arr, f, ensure_ascii=False, indent=1)
-            print(f"→ 东财股票池更新成功：{len(arr)} 只")
-            return
-    except Exception as e:
-        print(f"❌ 东财拉取失败: {e}")
-
     print("→ 使用 Baostock 拉取全市场股票池...")
-    try:
-        arr = _fetch_all_a_from_baostock()
-        if len(arr) > 3000:
-            with open(POOL_FILE, "w", encoding="utf-8") as f:
-                json.dump(arr, f, ensure_ascii=False, indent=1)
-            print(f"→ Baostock 股票池更新成功：{len(arr)} 只")
-            return
-    except Exception as e:
-        print(f"❌ Baostock 拉取失败: {e}")
-
-    raise RuntimeError("所有接口拉取股票池均失败，请检查网络！")
+    arr = _fetch_all_a_from_baostock()
+    if len(arr) > 3000:
+        with open(POOL_FILE, "w", encoding="utf-8") as f:
+            json.dump(arr, f, ensure_ascii=False, indent=1)
+        print(f"→ 股票池更新成功：{len(arr)} 只")
+    else:
+        raise RuntimeError("Baostock 拉取股票池失败！")
 
 
 def _load_pool():
     with open(POOL_FILE, encoding="utf-8") as f:
-        data = json.load(f)
-        if isinstance(data, dict) and "data" in data and "diff" in data["data"]:
-            arr = data["data"]["diff"]
-        else:
-            arr = data
-            
-    out = []
-    for x in arr:
-        code = str(x.get("f12", x.get("code", ""))).strip()
-        name = str(x.get("f14", x.get("name", ""))).strip()
-        if len(code) == 6:
-            out.append({"code": code, "name": name})
-    return out
+        return json.load(f)
 
 
-# ---------------- 2. 获取K线（极速网络优化） ----------------
-def fetch_kline_tencent(code, days=45):
-    sym = qq(code)
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={sym},day,,,{days},"
+# ---------------- 2. 获取K线（Baostock 极其稳定） ----------------
+def fetch_kline_baostock(code, days=45):
+    import baostock as bs
+    end_date = get_bj_time().strftime("%Y-%m-%d")
+    start_date = (get_bj_time() - timedelta(days=90)).strftime("%Y-%m-%d")
     
-    # 只尝试 1 次，timeout 缩短为 4 秒，海外网络慢就直接放弃，避免阻塞全盘
-    try:
-        r = requests.get(url, headers=HDR, timeout=4)
-        js = r.json()
-        if js.get("code") != 0:
-            return None
-        data_key = "day" if "day" in js["data"][sym] else "qfqday"
-        raw = js["data"][sym][data_key]
-        if not raw or len(raw) < 20:
-            return None
-        recs = []
-        for x in raw:
-            recs.append({
-                "date": x[0], 
-                "open": float(x[1]), 
-                "close": float(x[2]),
-                "high": float(x[3]), 
-                "low": float(x[4]), 
-                "volume": float(x[5]) * 100
-            })
-        return pd.DataFrame(recs)
-    except Exception:
+    sym = bs_code(code)
+    # adjustflag="3" 代表不复权，这对于精确判断涨停价至关重要
+    rs = bs.query_history_k_data_plus(
+        sym, "date,open,high,low,close,volume", 
+        start_date=start_date, end_date=end_date, 
+        frequency="d", adjustflag="3"
+    )
+    
+    if rs.error_code != '0':
         return None
+        
+    data = []
+    while rs.next():
+        data.append(rs.get_row_data())
+        
+    if len(data) < 20:
+        return None
+        
+    df = pd.DataFrame(data, columns=["date", "open", "high", "low", "close", "volume"])
+    df["open"] = df["open"].astype(float)
+    df["close"] = df["close"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
+    df["volume"] = df["volume"].astype(float) # 单位：股
+    
+    # 截取最近 45 天
+    return df.tail(days).reset_index(drop=True)
 
 
 # ---------------- 3. 信号判定 ----------------
@@ -215,8 +168,13 @@ def eval_signal(code, df):
 
 # ---------------- 4. 主扫描 ----------------
 def scan_all(progress=None):
+    import baostock as bs
     t_start = time.time()
     ensure_pool()
+    
+    # 登录 Baostock
+    bs.login()
+    
     pool = _load_pool()
     pool_dict = {x["code"]: x["name"] for x in pool}
     codes = list(pool_dict.keys())
@@ -227,19 +185,16 @@ def scan_all(progress=None):
     skipped_liq = 0
 
     def work(code):
-        # 获取 K 线
-        df = fetch_kline_tencent(code, 45)
-        if df is None:
+        df = fetch_kline_baostock(code, 45)
+        if df is None or df.empty:
             return code, None, "stale"
             
-        # 僵尸股判定：最后一天距今超过 10 天
         last_date = datetime.strptime(df.iloc[-1]["date"], "%Y-%m-%d")
-        # 用北京时间对比
         if (get_bj_time().replace(tzinfo=None) - last_date).days > 10:
             return code, None, "stale"
             
-        # 流动性过滤
         last_row = df.iloc[-1]
+        # 成交额估算：收盘价 * 成交量（股）
         amount = float(last_row['close']) * float(last_row['volume'])
         if amount < FILTER["min_amount_yi"] * 1e8:
             return code, None, "liq"
@@ -253,7 +208,7 @@ def scan_all(progress=None):
             return code, sig, None
         return code, None, None
 
-    # 线程数降为 8，避免 GitHub 海外 IP 被腾讯屏蔽
+    # Baostock 接口很稳，但并发别太高，8 线程完美
     with ThreadPoolExecutor(max_workers=8) as ex:
         futs = {ex.submit(work, c): c for c in codes}
         for i, fu in enumerate(as_completed(futs)):
@@ -274,10 +229,12 @@ def scan_all(progress=None):
             if progress and (i + 1) % 200 == 0:
                 progress(i + 1, len(codes), len(results))
 
+    bs.logout()
+    
     results.sort(key=lambda x: x["amount_yi"], reverse=True)
     
     return {
-        "trade_date": get_bj_time().strftime("%Y-%m-%d"), # 强制北京时间
+        "trade_date": get_bj_time().strftime("%Y-%m-%d"),
         "updated_at": get_bj_time().strftime("%Y-%m-%d %H:%M:%S"),
         "total_scanned": scanned,
         "skipped": f"僵尸/超时 {skipped_stale} 只, 流动性差 {skipped_liq} 只",
