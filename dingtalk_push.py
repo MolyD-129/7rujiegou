@@ -43,7 +43,6 @@ def send_markdown(title, content):
 
 
 def build_markdown(data):
-    """注意：钉钉自定义关键词为「股票」，标题与正文都包含该词"""
     sig = data["signals"]
     if not sig:
         return (f"### {data['trade_date']} 股票扫描 · 无信号\n\n"
@@ -51,11 +50,14 @@ def build_markdown(data):
                 f"空仓也是一种结果。")
     lines = [f"### {data['trade_date']} 股票信号 · 共 {len(sig)} 只", ""]
     for i, s in enumerate(sig, 1):
+        yz = " `[首板一字]`" if s.get("t0_yizi") else ""
         lines.append(
-            f"**{i}. {s['name']}（{s['code']}）** {s['price']}\n\n"
+            f"**{i}. {s['name']}（{s['code']}）** {s['price']}{yz}\n\n"
             f"> 涨幅 {s['pct_today']:+.2f}% · 启动线 {s['P']} · 破位 {s['break_date'][5:]}\n\n"
             f"> 站回第{s['days_after_break']}天 · 量/5日均 {s['vol_ratio_ma5']} · 成交 {s['amount_yi']}亿\n"
         )
         lines.append("")
     lines.append(f"---\n扫描 {data['total_scanned']} 只 · 用时 {data['elapsed']}s")
+    if data.get("skipped"):
+        lines.append(f"*(已跳过: {data['skipped']})*")
     return "\n".join(lines)
