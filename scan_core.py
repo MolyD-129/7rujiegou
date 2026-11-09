@@ -60,17 +60,31 @@ def _fetch_all_a_from_eastmoney():
 
 
 def ensure_pool(force=False, max_age_hours=24):
-    if not force and os.path.exists(POOL_FILE):
-        age_h = (time.time() - os.path.getmtime(POOL_FILE)) / 3600
-        if age_h < max_age_hours:
+    # 1. 如果本地已经有 pool.json，且数量超过 3000 只，直接使用！
+    if os.path.exists(POOL_FILE) and not force:
+        try:
             with open(POOL_FILE, encoding="utf-8") as f:
-                if len(json.load(f)) > 3000:
-                    return
-    print("→ 拉取全市场股票池...")
-    arr = _fetch_all_a_from_eastmoney()
-    with open(POOL_FILE, "w", encoding="utf-8") as f:
-        json.dump(arr, f, ensure_ascii=False, indent=1)
-    print(f"→ 股票池已更新：{len(arr)} 只")
+                arr = json.load(f)
+            if len(arr) > 3000:
+                print(f"→ 使用本地股票池缓存：{len(arr)} 只")
+                return
+        except Exception:
+            pass
+
+    # 2. 本地没有，才尝试去东财拉取
+    print("→ 本地无缓存，尝试拉取全市场股票池...")
+    try:
+        arr = _fetch_all_a_from_eastmoney()
+        with open(POOL_FILE, "w", encoding="utf-8") as f:
+            json.dump(arr, f, ensure_ascii=False, indent=1)
+        print(f"→ 股票池已更新：{len(arr)} 只")
+    except Exception as e:
+        print(f"❌ 动态拉取失败（服务器网络原因）: {e}")
+        # 兜底：如果拉取失败，但本地有个残缺的，也强行用
+        if os.path.exists(POOL_FILE):
+            print("⚠️ 将使用残缺的本地股票池继续扫描...")
+        else:
+            raise RuntimeError("首次运行且拉取失败，请手动上传 pool.json")
 
 
 def _load_pool():
