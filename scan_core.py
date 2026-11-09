@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""7入结构 核心扫描器（终极修复版）"""
+"""7入结构 核心扫描器（东财+baostock 双源股票池终极版）"""
 import json
 import os
 import time
@@ -28,7 +28,7 @@ def qq(code):
     return "sz" + code
 
 
-# ---------------- 1. 股票池拉取 ----------------
+# ---------------- 1. 股票池拉取（东财 + Baostock 兜底） ----------------
 def _fetch_all_a_from_eastmoney():
     url = "https://push2.eastmoney.com/api/qt/clist/get"
     params = {
@@ -38,25 +38,32 @@ def _fetch_all_a_from_eastmoney():
         "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
         "fields": "f12,f14",
     }
-    for a in range(3):
-        try:
-            r = requests.get(url, params=params, headers=HDR, timeout=30)
-            js = r.json()
-            diff = js["data"]["diff"]
-            out = []
-            for it in diff:
-                code = str(it.get("f12", "")).strip()
-                name = str(it.get("f14", "")).strip()
-                if len(code) == 6:
-                    out.append({"code": code, "name": name})
-            if len(out) > 3000:
-                return out
-            else:
-                print(f"  ⚠️ 股票池过小({len(out)}只)，重试...")
-        except Exception as e:
-            print(f"拉股票池失败(重试{a+1}): {e}")
-            time.sleep(2 * (a + 1))
-    raise RuntimeError("股票池拉取失败")
+    r = requests.get(url, params=params, headers=HDR, timeout=10)
+    js = r.json()
+    diff = js["data"]["diff"]
+    out = []
+    for it in diff:
+        code = str(it.get("f12", "")).strip()
+        name = str(it.get("f14", "")).strip()
+        if len(code) == 6:
+            out.append({"code": code, "name": name})
+    return out
+
+
+def _fetch_all_a_from_baostock():
+    import baostock as bs
+    lg = bs.login()
+    rs = bs.query_stock_basic()
+    out = []
+    while (rs.error_code == '0') & rs.next():
+        row = rs.get_row_data()
+        code_str = row[0].split(".")[-1]
+        name = row[1]
+        # 只要沪深A股（排除北交所，排除退市）
+        if len(code_str) == 6 and code_str.startswith(("60", "68", "00", "30")):
+            out.append({"code": code_str, "name": name})
+    bs.logout()
+    return out
 
 
 def ensure_pool(force=False, max_age_hours=24):
@@ -66,30 +73,56 @@ def ensure_pool(force=False, max_age_hours=24):
             with open(POOL_FILE, encoding="utf-8") as f:
                 arr = json.load(f)
             if len(arr) > 3000:
-                print(f"→ 使用本地股票池缓存：{len(arr)} 只")
+                print(f"→ 使用本地缓存股票池：{len(arr)} 只")
                 return
         except Exception:
             pass
 
-    # 2. 本地没有，才尝试去东财拉取
-    print("→ 本地无缓存，尝试拉取全市场股票池...")
+    # 2. 本地没有或数量太少，先试东财
+    print("→ 尝试从东方财富拉取全市场股票池...")
     try:
         arr = _fetch_all_a_from_eastmoney()
-        with open(POOL_FILE, "w", encoding="utf-8") as f:
-            json.dump(arr, f, ensure_ascii=False, indent=1)
-        print(f"→ 股票池已更新：{len(arr)} 只")
-    except Exception as e:
-        print(f"❌ 动态拉取失败（服务器网络原因）: {e}")
-        # 兜底：如果拉取失败，但本地有个残缺的，也强行用
-        if os.path.exists(POOL_FILE):
-            print("⚠️ 将使用残缺的本地股票池继续扫描...")
+        if len(arr) > 3000:
+            with open(POOL_FILE, "w", encoding="utf-8") as f:
+                json.dump(arr, f, ensure_ascii=False, indent=1)
+            print(f"→ 东财股票池更新成功：{len(arr)} 只")
+            return
         else:
-            raise RuntimeError("首次运行且拉取失败，请手动上传 pool.json")
+            print(f"⚠️ 东财返回数据过小({len(arr)}只)，准备切换 baostock...")
+    except Exception as e:
+        print(f"❌ 东财拉取失败: {e}")
+
+    # 3. 东财失败，用 baostock 兜底
+    print("→ 使用 Baostock 拉取全市场股票池...")
+    try:
+        arr = _fetch_all_a_from_baostock()
+        if len(arr) > 3000:
+            with open(POOL_FILE, "w", encoding="utf-8") as f:
+                json.dump(arr, f, ensure_ascii=False, indent=1)
+            print(f"→ Baostock 股票池更新成功：{len(arr)} 只")
+            return
+    except Exception as e:
+        print(f"❌ Baostock 拉取失败: {e}")
+
+    raise RuntimeError("所有接口拉取股票池均失败，请检查网络！")
 
 
 def _load_pool():
     with open(POOL_FILE, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+        # 兼容两种情况：东财的 f12/f14 结构，或代码保存的 code/name 结构
+        if isinstance(data, dict) and "data" in data and "diff" in data["data"]:
+            arr = data["data"]["diff"]
+        else:
+            arr = data
+            
+    out = []
+    for x in arr:
+        code = str(x.get("f12", x.get("code", ""))).strip()
+        name = str(x.get("f14", x.get("name", ""))).strip()
+        if len(code) == 6:
+            out.append({"code": code, "name": name})
+    return out
 
 
 # ---------------- 2. 获取K线（不复权） ----------------
@@ -165,7 +198,7 @@ def eval_signal(code, df):
                 d.at[last, "volume"] > d.at[last, "ma10v"]):
             continue
             
-        # 边界处理：破位到站回期间，如果出现新首板，老信号作废（解决 603657 问题）
+        # 边界处理：破位到站回期间，如果出现新首板，老信号作废
         if d.loc[t0+1:last, "fb"].any():
             continue
             
