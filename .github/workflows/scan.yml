@@ -12,12 +12,12 @@ permissions:
 
 concurrency:
   group: scan
-  cancel-in-progress: false
+  cancel-in-progress: true    # 改为 true：如果有新任务，直接取消旧的卡死任务
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15       # 改为 15：新版极速代码几分钟就能跑完
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -47,7 +47,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web/data.json pool.json 2>/dev/null || true
+          # 只提交 data.json，不再管 pool.json
+          git add web/data.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "无数据变化，跳过提交"
           else
