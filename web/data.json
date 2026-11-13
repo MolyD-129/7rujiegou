@@ -1,9 +1,9 @@
 {
  "trade_date": "2026-11-14",
- "updated_at": "2026-11-14 00:59:35",
- "total_scanned": 612,
- "skipped": "流动性差 7 只",
- "elapsed": 145.5,
+ "updated_at": "2026-11-14 02:20:30",
+ "total_scanned": 614,
+ "skipped": "流动性差 10 只",
+ "elapsed": 123.1,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -14,6 +14,25 @@
   "min_amount_yi": 0.5,
   "exclude_st": true
  },
- "signals": [],
+ "signals": [
+  {
+   "t0_date": "2026-11-04",
+   "P": 66.71,
+   "break_date": "2026-11-06",
+   "break_low": 66.09,
+   "days_after_break": 5,
+   "vol_ratio_ma5": 1.33,
+   "vol_ratio_ma10": 1.28,
+   "vol_vs_t0": 1.95,
+   "t0_pct": 10.0,
+   "close": 73.77,
+   "pct_today": 5.24,
+   "t0_yizi": false,
+   "code": "605288",
+   "name": "凯迪股份",
+   "price": 73.77,
+   "amount_yi": 2.84
+  }
+ ],
  "pushed": true
 }
