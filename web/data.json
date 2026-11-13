@@ -1,9 +1,9 @@
 {
- "trade_date": "2026-11-12",
- "updated_at": "2026-11-12 02:15:27",
- "total_scanned": 586,
- "skipped": "流动性差 9 只",
- "elapsed": 130.8,
+ "trade_date": "2026-11-14",
+ "updated_at": "2026-11-14 00:59:35",
+ "total_scanned": 612,
+ "skipped": "流动性差 7 只",
+ "elapsed": 145.5,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -14,43 +14,6 @@
   "min_amount_yi": 0.5,
   "exclude_st": true
  },
- "signals": [
-  {
-   "t0_date": "2026-11-04",
-   "P": 74.0,
-   "break_date": "2026-11-06",
-   "break_low": 70.96,
-   "days_after_break": 3,
-   "vol_ratio_ma5": 1.06,
-   "vol_ratio_ma10": 1.22,
-   "vol_vs_t0": 0.99,
-   "t0_pct": 10.0,
-   "close": 77.98,
-   "pct_today": 7.03,
-   "t0_yizi": false,
-   "code": "002428",
-   "name": "云南锗业",
-   "price": 77.98,
-   "amount_yi": 66.03
-  },
-  {
-   "t0_date": "2026-11-04",
-   "P": 25.7,
-   "break_date": "2026-11-06",
-   "break_low": 25.07,
-   "days_after_break": 3,
-   "vol_ratio_ma5": 1.04,
-   "vol_ratio_ma10": 1.01,
-   "vol_vs_t0": 0.8,
-   "t0_pct": 9.98,
-   "close": 29.72,
-   "pct_today": 7.72,
-   "t0_yizi": false,
-   "code": "002436",
-   "name": "兴森科技",
-   "price": 29.72,
-   "amount_yi": 33.54
-  }
- ],
+ "signals": [],
  "pushed": true
 }
