@@ -1,9 +1,9 @@
 {
  "trade_date": "2026-11-19",
- "updated_at": "2026-11-19 01:50:07",
- "total_scanned": 535,
- "skipped": "流动性差 8 只",
- "elapsed": 146.1,
+ "updated_at": "2026-11-19 03:14:47",
+ "total_scanned": 546,
+ "skipped": "流动性差 0 只",
+ "elapsed": 157.2,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -14,43 +14,6 @@
   "min_amount_yi": 0.5,
   "exclude_st": true
  },
- "signals": [
-  {
-   "t0_date": "2026-11-10",
-   "P": 10.53,
-   "break_date": "2026-11-13",
-   "break_low": 9.86,
-   "days_after_break": 3,
-   "vol_ratio_ma5": 1.21,
-   "vol_ratio_ma10": 1.37,
-   "vol_vs_t0": 1.93,
-   "t0_pct": 10.03,
-   "close": 12.41,
-   "pct_today": 4.73,
-   "t0_yizi": true,
-   "code": "000530",
-   "name": "冰山冷热",
-   "price": 12.41,
-   "amount_yi": 35.19
-  },
-  {
-   "t0_date": "2026-11-10",
-   "P": 3.56,
-   "break_date": "2026-11-13",
-   "break_low": 3.38,
-   "days_after_break": 3,
-   "vol_ratio_ma5": 1.29,
-   "vol_ratio_ma10": 1.47,
-   "vol_vs_t0": 1.37,
-   "t0_pct": 9.94,
-   "close": 3.71,
-   "pct_today": 6.3,
-   "t0_yizi": false,
-   "code": "600408",
-   "name": "安泰集团",
-   "price": 3.71,
-   "amount_yi": 8.68
-  }
- ],
+ "signals": [],
  "pushed": true
 }
