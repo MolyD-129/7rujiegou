@@ -1,9 +1,9 @@
 {
  "trade_date": "2026-11-26",
- "updated_at": "2026-11-26 03:00:30",
- "total_scanned": 446,
+ "updated_at": "2026-11-26 04:20:34",
+ "total_scanned": 442,
  "skipped": "流动性差 11 只",
- "elapsed": 120.3,
+ "elapsed": 101.2,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -14,6 +14,25 @@
   "min_amount_yi": 0.5,
   "exclude_st": true
  },
- "signals": [],
+ "signals": [
+  {
+   "t0_date": "2026-11-17",
+   "P": 4.4,
+   "break_date": "2026-11-20",
+   "break_low": 3.92,
+   "days_after_break": 3,
+   "vol_ratio_ma5": 1.05,
+   "vol_ratio_ma10": 1.44,
+   "vol_vs_t0": 2.18,
+   "t0_pct": 9.98,
+   "close": 4.68,
+   "pct_today": 4.7,
+   "t0_yizi": false,
+   "code": "000521",
+   "name": "长虹美菱",
+   "price": 4.68,
+   "amount_yi": 5.05
+  }
+ ],
  "pushed": true
 }
