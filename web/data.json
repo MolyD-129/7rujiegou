@@ -1,9 +1,9 @@
 {
- "trade_date": "2026-11-24",
- "updated_at": "2026-11-24 06:21:52",
- "total_scanned": 462,
- "skipped": "流动性差 3 只",
- "elapsed": 141.9,
+ "trade_date": "2026-11-26",
+ "updated_at": "2026-11-26 03:00:30",
+ "total_scanned": 446,
+ "skipped": "流动性差 11 只",
+ "elapsed": 120.3,
  "params": {
   "n_break": 3,
   "m_enter": 7,
