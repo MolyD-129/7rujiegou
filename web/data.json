@@ -1,9 +1,9 @@
 {
  "trade_date": "2026-11-28",
- "updated_at": "2026-11-28 02:42:46",
- "total_scanned": 769,
+ "updated_at": "2026-11-28 03:45:56",
+ "total_scanned": 761,
  "skipped": "流动性差 14 只",
- "elapsed": 44.1,
+ "elapsed": 73.9,
  "params": {
   "n_break": 3,
   "m_enter": 7,
@@ -230,24 +230,6 @@
    "name": "鸿合科技",
    "price": 26.27,
    "amount_yi": 1.59
-  },
-  {
-   "t0_date": "2026-11-25",
-   "P": 4.47,
-   "break_date": "2026-11-26",
-   "break_low": 4.19,
-   "days_after_break": 1,
-   "vol_ratio_ma5": 1.41,
-   "vol_ratio_ma10": 1.95,
-   "vol_vs_t0": 2.57,
-   "t0_pct": 9.91,
-   "close": 4.53,
-   "pct_today": 2.03,
-   "t0_yizi": false,
-   "code": "000702",
-   "name": "正虹科技",
-   "price": 4.53,
-   "amount_yi": 1.5
   },
   {
    "t0_date": "2026-11-24",
